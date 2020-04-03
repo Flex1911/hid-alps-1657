@@ -1,0 +1,1 @@
+ACTION=="add", SUBSYSTEM=="hid", DRIVER=="hid-generic", ATTRS{idVendor}=="044e", ATTRS{idProduct}=="121e",  RUN+="/bin/sh -c '/sbin/modprobe hid-alps; if test -d /sys/bus/hid/drivers/hid-generic && test -d /sys/bus/hid/drivers/hid-alps; then /bin/echo -n %k > /sys/bus/hid/drivers/hid-generic/unbind; /bin/echo -n %k > /sys/bus/hid/drivers/hid-alps/bind;fi'"
