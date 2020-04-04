@@ -83,8 +83,8 @@ enum dev_num {
  * @max_fingers: total number of fingers
  * @has_sp: boolean of sp existense
  * @sp_btn_info: button information
- * @x_active_len_mm: active area length of X (mm)
- * @y_active_len_mm: active area length of Y (mm)
+ * @x_res: resolution of X
+ * @y_res: resolution of Y
  * @x_max: maximum x coordinate value
  * @y_max: maximum y coordinate value
  * @x_min: minimum x coordinate value
@@ -100,9 +100,10 @@ struct alps_dev {
 	enum dev_num dev_type;
 	u8  max_fingers;
 	u8  has_sp;
+	u8  no_pitch;
 	u8	sp_btn_info;
-	u32	x_active_len_mm;
-	u32	y_active_len_mm;
+	u32	x_res;
+	u32	y_res;
 	u32	x_max;
 	u32	y_max;
 	u32	x_min;
@@ -550,10 +551,6 @@ static int u1_init(struct hid_device *hdev, struct alps_dev *pri_data)
 		dev_err(&hdev->dev, "failed U1_RESO_DWN_ABS (%d)\n", ret);
 		goto exit;
 	}
-	pri_data->x_active_len_mm =
-		(pitch_x * (sen_line_num_x - 1)) / 10;
-	pri_data->y_active_len_mm =
-		(pitch_y * (sen_line_num_y - 1)) / 10;
 
 	pri_data->x_max =
 		(resolution << 2) * (sen_line_num_x - 1);
@@ -561,6 +558,16 @@ static int u1_init(struct hid_device *hdev, struct alps_dev *pri_data)
 	pri_data->y_max =
 		(resolution << 2) * (sen_line_num_y - 1);
 	pri_data->y_min = 1;
+
+	if (pri_data->no_pitch) {
+		pri_data->x_res = pitch_x;
+		pri_data->y_res = pitch_y;
+	} else {
+		pri_data->x_res =
+			(pri_data->x_max - 1) / ((pitch_x * (sen_line_num_x - 1)) / 10);
+		pri_data->y_res =
+			(pri_data->y_max - 1) / ((pitch_y * (sen_line_num_y - 1)) / 10);
+	}
 
 	ret = u1_read_write_register(hdev, ADDRESS_U1_PAD_BTN,
 			&tmp, 0, true);
@@ -622,7 +629,7 @@ static int T4_init(struct hid_device *hdev, struct alps_dev *pri_data)
 	pri_data->x_min = T4_COUNT_PER_ELECTRODE;
 	pri_data->y_max = sen_line_num_y * T4_COUNT_PER_ELECTRODE;
 	pri_data->y_min = T4_COUNT_PER_ELECTRODE;
-	pri_data->x_active_len_mm = pri_data->y_active_len_mm = 0;
+	pri_data->x_res = pri_data->y_res = 0;
 	pri_data->btn_cnt = 1;
 
 	ret = t4_read_write_register(hdev, PRM_SYS_CONFIG_1, &tmp, 0, true);
@@ -675,7 +682,7 @@ static int alps_input_configured(struct hid_device *hdev, struct hid_input *hi)
 	struct alps_dev *data = hid_get_drvdata(hdev);
 	struct input_dev *input = hi->input, *input2;
 	int ret;
-	int res_x, res_y, i;
+	int i;
 
 	data->input = input;
 
@@ -706,12 +713,9 @@ static int alps_input_configured(struct hid_device *hdev, struct hid_input *hi)
 	input_set_abs_params(input, ABS_MT_POSITION_Y,
 						data->y_min, data->y_max, 0, 0);
 
-	if (data->x_active_len_mm && data->y_active_len_mm) {
-		res_x = (data->x_max - 1) / data->x_active_len_mm;
-		res_y = (data->y_max - 1) / data->y_active_len_mm;
-
-		input_abs_set_res(input, ABS_MT_POSITION_X, res_x);
-		input_abs_set_res(input, ABS_MT_POSITION_Y, res_y);
+	if (data->x_res && data->y_res) {
+		input_abs_set_res(input, ABS_MT_POSITION_X, data->x_res);
+		input_abs_set_res(input, ABS_MT_POSITION_Y, data->y_res);
 	}
 
 	input_set_abs_params(input, ABS_MT_PRESSURE, 0, 64, 0, 0);
@@ -802,8 +806,11 @@ static int alps_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	case HID_DEVICE_ID_ALPS_U1_DUAL:
 	case HID_DEVICE_ID_ALPS_U1:
-        case HID_DEVICE_ID_ALPS_1657:
 		data->dev_type = U1;
+		break;
+	case HID_DEVICE_ID_ALPS_1657:
+		data->dev_type = U1;
+		data->no_pitch = 1;
 		break;
 	default:
 		data->dev_type = UNKNOWN;
