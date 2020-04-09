@@ -1,0 +1,5 @@
+[AUI1657]
+MatchName=*AUI1657*
+AttrPressureRange=20:10
+AttrThumbPressureThreshold=90
+AttrPalmPressureThreshold=125
